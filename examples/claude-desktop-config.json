@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "signageqa": {
+      "command": "node",
+      "args": ["/absolute/path/to/SignageQA-MCP-Server/dist/index.js"],
+      "env": {
+        "AI_PROVIDER": "claude",
+        "ANTHROPIC_API_KEY": "your_key_here",
+        "SCREENSHOTS_DIR": "/tmp/signageqa-screenshots"
+      }
+    }
+  }
+}

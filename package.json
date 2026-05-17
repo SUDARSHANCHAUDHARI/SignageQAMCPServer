@@ -1,0 +1,30 @@
+{
+  "name": "signageqa-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server giving AI agents tools to inspect and diagnose digital signage systems",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@modelcontextprotocol/sdk": "latest",
+    "openai": "latest",
+    "playwright": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "author": "SUDARSHANCHAUDHARI"
+}
