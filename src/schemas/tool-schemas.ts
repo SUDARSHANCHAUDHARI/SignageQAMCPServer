@@ -13,8 +13,13 @@ export type Issue = z.infer<typeof IssueSchema>;
 
 // ── Tool input schemas ─────────────────────────────────────────────────────
 
+export const HttpUrlSchema = z.string().url({ message: "Must be a valid URL" }).refine((value) => {
+  const url = new URL(value);
+  return url.protocol === "http:" || url.protocol === "https:";
+}, "Only http and https URLs are supported");
+
 export const InspectUrlInputSchema = z.object({
-  url: z.string().url({ message: "Must be a valid URL" }),
+  url: HttpUrlSchema,
   checkIframe: z.boolean().optional().default(false),
   captureScreenshot: z.boolean().optional().default(false),
 });
@@ -22,13 +27,13 @@ export const InspectUrlInputSchema = z.object({
 export type InspectUrlInput = z.infer<typeof InspectUrlInputSchema>;
 
 export const CheckIframeInputSchema = z.object({
-  url: z.string().url({ message: "Must be a valid URL" }),
+  url: HttpUrlSchema,
 });
 
 export type CheckIframeInput = z.infer<typeof CheckIframeInputSchema>;
 
 export const CaptureScreenshotInputSchema = z.object({
-  url: z.string().url({ message: "Must be a valid URL" }),
+  url: HttpUrlSchema,
   width: z.number().int().positive().optional().default(1920),
   height: z.number().int().positive().optional().default(1080),
   outputPath: z.string().optional(),
@@ -38,7 +43,7 @@ export type CaptureScreenshotInput = z.infer<typeof CaptureScreenshotInputSchema
 
 export const GenerateBugReportInputSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  url: z.string().url().optional(),
+  url: HttpUrlSchema.optional(),
   issuesFound: z.array(IssueSchema),
   screenshots: z.array(z.string()).optional().default([]),
   devicePlatform: z.string().optional(),
