@@ -65,6 +65,20 @@ Claude will call:
 - Zod (schema validation)
 - Anthropic SDK / OpenAI SDK
 
+## Production Checks
+
+```bash
+pnpm type-check
+pnpm test
+pnpm build
+```
+
+## Release Notes
+
+- Do not commit `.env` files, captured screenshots, or local MCP client config with real keys.
+- `SCREENSHOTS_DIR` should point to writable runtime storage if screenshot capture is enabled.
+- Playwright is runtime functionality for screenshot capture, not a browser smoke-test dependency.
+
 ## License
 
 MIT
