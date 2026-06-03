@@ -1,15 +1,32 @@
 # SignageQA MCP Server
 
-TypeScript MCP server that gives AI agents (Claude Desktop, Cursor, etc.) real tools to inspect and diagnose digital signage systems.
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)
+![MCP](https://img.shields.io/badge/MCP-Server-111827)
+![License](https://img.shields.io/badge/License-MIT-blue)
+
+MCP server for inspecting digital signage URLs, iframe compatibility, screenshots, and bug reports from AI tools such as Claude Desktop or Cursor.
+
+## What It Does
+
+SignageQA MCP Server gives an AI agent real diagnostic tools instead of asking it to guess from a URL. It can inspect headers, detect iframe blockers, capture visual evidence, and produce a structured bug report for support or engineering.
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `inspect_url` | Full URL inspection: HTTP status, iframe compatibility, auth walls, headers |
-| `check_iframe_compatibility` | Check CSP + X-Frame-Options for iframe embedding |
-| `capture_screenshot` | Headless Playwright screenshot at any resolution |
-| `generate_bug_report` | AI-written or template-based Markdown bug report |
+| Tool | Purpose |
+|---|---|
+| `inspect_url` | Checks HTTP status, redirects, headers, iframe risk, and auth-wall signals. |
+| `check_iframe_compatibility` | Detects CSP and `X-Frame-Options` policies that block signage iframe playback. |
+| `capture_screenshot` | Captures a headless browser screenshot at a requested viewport size. |
+| `generate_bug_report` | Creates a Markdown bug report with either AI or deterministic fallback text. |
+
+## Tech Stack
+
+- TypeScript, ESM, strict mode
+- Model Context Protocol TypeScript SDK
+- Playwright for runtime screenshot capture
+- Zod for tool input validation
+- Anthropic SDK and OpenAI SDK for optional AI summaries
+- Vitest for focused URL safety tests
 
 ## Setup
 
@@ -18,52 +35,47 @@ pnpm install
 pnpm build
 ```
 
-### Claude Desktop config
+## Environment Variables
 
-Copy `examples/claude-desktop-config.json` and update the path:
+```env
+AI_PROVIDER=claude
+ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+SCREENSHOTS_DIR=./screenshots
+```
+
+AI keys are optional. The inspection, iframe, and screenshot tools work without them.
+
+## Claude Desktop Config
+
+Copy `examples/claude-desktop-config.json`, then update the built `dist/index.js` path:
 
 ```json
 {
   "mcpServers": {
     "signageqa": {
       "command": "node",
-      "args": ["/path/to/dist/index.js"],
+      "args": ["/absolute/path/to/dist/index.js"],
       "env": {
         "AI_PROVIDER": "claude",
-        "ANTHROPIC_API_KEY": "sk-..."
+        "ANTHROPIC_API_KEY": "your_key_here"
       }
     }
   }
 }
 ```
 
-## Environment Variables
+## Example Prompt
 
-```env
-AI_PROVIDER=claude          # or: openai (optional — tools work without AI)
-ANTHROPIC_API_KEY=...
-OPENAI_API_KEY=...
-SCREENSHOTS_DIR=./screenshots
+```text
+Check why this customer URL will not load inside our signage iframe.
 ```
 
-AI is **optional** — all 4 tools work without API keys. AI only enhances `generate_bug_report` summaries.
+Expected flow:
 
-## Example Usage with Claude
-
-> "Check why this customer URL won't load in our signage iframe."
-
-Claude will call:
-1. `check_iframe_compatibility` → detect CSP/X-Frame-Options block
-2. `capture_screenshot` → visual evidence
-3. `generate_bug_report` → structured report with customer explanation
-
-## Tech Stack
-
-- TypeScript (ESM, strict)
-- `@modelcontextprotocol/sdk`
-- Playwright (headless browser)
-- Zod (schema validation)
-- Anthropic SDK / OpenAI SDK
+1. Run `check_iframe_compatibility`.
+2. Capture a screenshot if the page loads.
+3. Generate a support-ready bug report.
 
 ## Production Checks
 
@@ -75,9 +87,13 @@ pnpm build
 
 ## Release Notes
 
-- Do not commit `.env` files, captured screenshots, or local MCP client config with real keys.
-- `SCREENSHOTS_DIR` should point to writable runtime storage if screenshot capture is enabled.
-- Playwright is runtime functionality for screenshot capture, not a browser smoke-test dependency.
+- Do not commit `.env` files, captured screenshots, or MCP client config containing real keys.
+- Set `SCREENSHOTS_DIR` to writable runtime storage when screenshot capture is enabled.
+- Playwright is product runtime functionality for screenshot capture. It is not a browser smoke-test dependency.
+
+## Author
+
+Built by [Sudarshan Chaudhari](https://github.com/SUDARSHANCHAUDHARI) for **SudarshanTechLabs**.
 
 ## License
 
