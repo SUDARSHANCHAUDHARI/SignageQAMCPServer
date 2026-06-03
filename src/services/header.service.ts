@@ -19,13 +19,39 @@ function parseCspFrameAncestors(csp: string): boolean {
   return value === "*" || value === "'*'";
 }
 
+export function isBlockedHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized.endsWith(".local");
+}
+
 export async function checkHeaders(url: string): Promise<HeaderCheckResult> {
   const headers: Record<string, string> = {};
   let status: number | null = null;
   let authWallDetected = false;
+  const targetUrl = new URL(url);
+
+  if (isBlockedHost(targetUrl.hostname)) {
+    return {
+      status: null,
+      headers: {},
+      iframeAllowed: false,
+      mixedContentRisk: false,
+      authWallDetected: false,
+      issues: [{
+        code: "LOCAL_URL_BLOCKED",
+        severity: "high",
+        description: "Local or private hostnames are not allowed",
+        recommendation: "Use a publicly reachable http(s) URL",
+      }],
+      recommendation: "Use a publicly reachable http(s) URL.",
+    };
+  }
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(targetUrl.toString(), {
       method: "HEAD",
       redirect: "follow",
       signal: AbortSignal.timeout(8000),
@@ -68,7 +94,7 @@ export async function checkHeaders(url: string): Promise<HeaderCheckResult> {
     }
   }
 
-  const isHttps = url.startsWith("https://");
+  const isHttps = targetUrl.protocol === "https:";
   const mixedContentRisk = !isHttps;
   if (mixedContentRisk) {
     issues.push({ code: "MIXED_CONTENT", severity: "medium", description: "URL is HTTP — may cause mixed content warnings on HTTPS signage players", recommendation: "Use HTTPS version of the URL" });
