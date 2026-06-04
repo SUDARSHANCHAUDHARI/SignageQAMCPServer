@@ -11,6 +11,6 @@ describe("isBlockedHost", () => {
 
   it("allows public hostnames", () => {
     expect(isBlockedHost("example.com")).toBe(false);
-    expect(isBlockedHost("screencloud.com")).toBe(false);
+    expect(isBlockedHost("public-signage.example")).toBe(false);
   });
 });

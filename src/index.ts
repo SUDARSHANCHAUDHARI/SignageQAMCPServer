@@ -66,7 +66,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           url: { type: "string", description: "Affected URL (optional)" },
           issuesFound: { type: "array", description: "Array of issues with code, severity, description" },
           screenshots: { type: "array", items: { type: "string" }, description: "Screenshot paths (optional)" },
-          devicePlatform: { type: "string", description: "Device platform e.g. SCOS, Windows, Android" },
+          devicePlatform: { type: "string", description: "Device platform e.g. signage device, Windows, Android" },
           notes: { type: "string", description: "Additional notes" },
         },
         required: ["title", "issuesFound"],
