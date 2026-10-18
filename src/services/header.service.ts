@@ -1,3 +1,7 @@
+import { lookup } from "dns/promises";
+import { request as httpRequest } from "http";
+import { request as httpsRequest } from "https";
+import type { LookupFunction } from "net";
 import type { Issue } from "../schemas/tool-schemas.js";
 
 export interface HeaderCheckResult {
@@ -19,12 +23,94 @@ function parseCspFrameAncestors(csp: string): boolean {
   return value === "*" || value === "'*'";
 }
 
+const MAX_REDIRECTS = 5;
+
+function isPrivateIp(ip: string): boolean {
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127);
+  }
+  if (!ip.includes(":")) return false;
+  const v6 = ip.toLowerCase();
+  if (v6 === "::" || v6 === "::1" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6)) return true;
+  // IPv4-mapped: ::ffff:1.2.3.4 (dns) or ::ffff:102:304 (URL-normalized)
+  const mapped = v6.match(/^::ffff:(.+)$/);
+  if (!mapped?.[1]) return false;
+  const hex = mapped[1].match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!hex?.[1] || !hex[2]) return isPrivateIp(mapped[1]);
+  const hi = parseInt(hex[1], 16);
+  const lo = parseInt(hex[2], 16);
+  return isPrivateIp(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+}
+
 export function isBlockedHost(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
+  const normalized = hostname.toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
   return normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1" ||
-    normalized.endsWith(".local");
+    /\.(localhost|local|internal)$/.test(normalized) ||
+    isPrivateIp(normalized);
+}
+
+// Name/literal check plus DNS: blocked if ANY resolved address is private.
+// shortcut: Playwright re-resolves, so DNS rebinding between check and page.goto
+// is not covered for screenshots; route the browser through a pinning proxy if needed.
+export async function isPublicHost(hostname: string): Promise<boolean> {
+  if (isBlockedHost(hostname)) return false;
+  try {
+    const addresses = await lookup(hostname.replace(/^\[|\]$/g, ""), { all: true });
+    return addresses.length > 0 && addresses.every((a) => !isPrivateIp(a.address));
+  } catch {
+    return false;
+  }
+}
+
+// Resolves once and refuses if ANY address is private; the socket connects to the
+// vetted address, so a second (rebinding) answer is never used. Host/SNI stay the name.
+const pinnedLookup: LookupFunction = (hostname, options, callback) => {
+  lookup(hostname, { all: true })
+    .then((addresses) => {
+      const first = addresses[0];
+      if (!first || addresses.some((a) => isPrivateIp(a.address))) throw new Error("blocked host");
+      if (options.all) callback(null, addresses);
+      else callback(null, first.address, first.family);
+    })
+    .catch((err) => callback(err, ""));
+};
+
+function headPinned(url: URL): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const send = url.protocol === "https:" ? httpsRequest : httpRequest;
+    const req = send(url, { method: "HEAD", lookup: pinnedLookup, signal: AbortSignal.timeout(8000) }, (res) => {
+      res.resume();
+      try {
+        const headers = new Headers();
+        for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i]!, res.rawHeaders[i + 1]!);
+        resolve(new Response(null, { status: res.statusCode ?? 0, headers }));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+// Follows redirects by hand so every hop is re-validated.
+async function fetchPublicHead(start: URL): Promise<Response | null> {
+  let current = start;
+  for (let hop = 0; ; hop++) {
+    if ((current.protocol !== "http:" && current.protocol !== "https:") || !(await isPublicHost(current.hostname))) return null;
+    const res = await headPinned(current);
+    const location = res.headers.get("location");
+    if (res.status < 300 || res.status >= 400 || !location) return res;
+    if (hop >= MAX_REDIRECTS) throw new Error("too many redirects");
+    current = new URL(location, current);
+  }
 }
 
 export async function checkHeaders(url: string): Promise<HeaderCheckResult> {
@@ -33,29 +119,28 @@ export async function checkHeaders(url: string): Promise<HeaderCheckResult> {
   let authWallDetected = false;
   const targetUrl = new URL(url);
 
+  const blocked: HeaderCheckResult = {
+    status: null,
+    headers: {},
+    iframeAllowed: false,
+    mixedContentRisk: false,
+    authWallDetected: false,
+    issues: [{
+      code: "LOCAL_URL_BLOCKED",
+      severity: "high",
+      description: "Local or private hostnames are not allowed",
+      recommendation: "Use a publicly reachable http(s) URL",
+    }],
+    recommendation: "Use a publicly reachable http(s) URL.",
+  };
+
   if (isBlockedHost(targetUrl.hostname)) {
-    return {
-      status: null,
-      headers: {},
-      iframeAllowed: false,
-      mixedContentRisk: false,
-      authWallDetected: false,
-      issues: [{
-        code: "LOCAL_URL_BLOCKED",
-        severity: "high",
-        description: "Local or private hostnames are not allowed",
-        recommendation: "Use a publicly reachable http(s) URL",
-      }],
-      recommendation: "Use a publicly reachable http(s) URL.",
-    };
+    return blocked;
   }
 
   try {
-    const res = await fetch(targetUrl.toString(), {
-      method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(8000),
-    });
+    const res = await fetchPublicHead(targetUrl);
+    if (!res) return blocked;
     status = res.status;
     res.headers.forEach((v, k) => {
       headers[k.toLowerCase()] = v;
